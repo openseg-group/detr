@@ -14,7 +14,7 @@ import datasets
 import util.misc as utils
 from datasets import build_dataset, get_coco_api_from_dataset
 from engine import evaluate, train_one_epoch
-from models import build_model
+from hrnet import build_model
 
 
 def get_args_parser():
@@ -32,7 +32,7 @@ def get_args_parser():
     parser.add_argument('--frozen_weights', type=str, default=None,
                         help="Path to the pretrained model. If set, only the mask head will be trained")
     # * Backbone
-    parser.add_argument('--backbone', default='resnet50', type=str,
+    parser.add_argument('--backbone', default='hrnet18', type=str,
                         help="Name of the convolutional backbone to use")
     parser.add_argument('--dilation', action='store_true',
                         help="If true, we replace stride with dilation in the last convolutional block (DC5)")
@@ -128,7 +128,7 @@ def main(args):
 
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)

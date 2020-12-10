@@ -11,10 +11,11 @@ from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
 
-from .backbone import build_backbone
-from .matcher import build_matcher
-from .segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
+from models.matcher import build_matcher
+from models.segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
                            dice_loss, sigmoid_focal_loss)
+
+from .backbone import build_backbone
 from .transformer import build_transformer
 
 import pdb
@@ -60,10 +61,19 @@ class DETR(nn.Module):
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         features, pos = self.backbone(samples)
-
+        
         src, mask = features[-1].decompose()
-        assert mask is not None
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
+        assert src is not None
+
+        #
+        src_4x, mask_4x = features[1].decompose()
+        src_8x, mask_8x = features[2].decompose()
+        src_16x, mask_16x = features[3].decompose()
+        src_list = [src_4x, src_8x, src_16x]
+        mask_list = [mask_4x, mask_8x, mask_16x]
+
+        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1],
+                              src_list, mask_list)[0]
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
