@@ -15,6 +15,7 @@ from util.misc import NestedTensor, is_main_process
 
 from .position_encoding import build_position_encoding
 
+import pdb
 
 class FrozenBatchNorm2d(torch.nn.Module):
     """
@@ -24,7 +25,6 @@ class FrozenBatchNorm2d(torch.nn.Module):
     without which any other models than torchvision.models.resnet[18,34,50,101]
     produce nans.
     """
-
     def __init__(self, n):
         super(FrozenBatchNorm2d, self).__init__()
         self.register_buffer("weight", torch.ones(n))

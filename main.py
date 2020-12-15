@@ -60,7 +60,7 @@ def get_args_parser():
     parser.add_argument('--masks', action='store_true',
                         help="Train segmentation head if the flag is provided")
 
-    # Loss
+    # Loss https://github.com/facebookresearch/detr/issues/85
     parser.add_argument('--no_aux_loss', dest='aux_loss', action='store_false',
                         help="Disables auxiliary decoding losses (loss at each layer)")
     # * Matcher
@@ -99,6 +99,8 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+
+    # parser.add_argument('--split_head', action='store_true')
     return parser
 
 
@@ -118,6 +120,9 @@ def main(args):
     np.random.seed(seed)
     random.seed(seed)
 
+    # if args.split_head:
+    #     model, criterion, postprocessors = build_split_model(args)
+    # else:
     model, criterion, postprocessors = build_model(args)
     model.to(device)
 

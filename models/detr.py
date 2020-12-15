@@ -17,6 +17,7 @@ from .segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
                            dice_loss, sigmoid_focal_loss)
 from .transformer import build_transformer
 
+import pdb
 
 class DETR(nn.Module):
     """ This is the DETR module that performs object detection """

@@ -69,7 +69,7 @@ def _expand(tensor, length: int):
 class MaskHeadSmallConv(nn.Module):
     """
     Simple convolutional head, using group norm.
-    Upsampling is done using a FPN approach
+    Upsampling is done using a FPN approach.
     """
 
     def __init__(self, dim, fpn_dims, context_dim):
