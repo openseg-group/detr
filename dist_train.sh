@@ -1,6 +1,9 @@
 PYTHON="/root/miniconda3/envs/detr/bin/python"
 $PYTHON -m pip install scipy
+<<<<<<< HEAD
 $PYTHON -m pip install yacs
+=======
+>>>>>>> 76a10fa00fb6831dca3bbb2711862831817d56af
 
 DATAPATH=$1"/coco"
 BACKBONE=$2
