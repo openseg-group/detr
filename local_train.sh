@@ -40,6 +40,7 @@ elif [ "$1"x == "h18"x ]; then
 
     export incre_memory_resolution=1
     export freeze_stem_stage1=0
+    export sparse_transformer=1
 
     $PYTHON -m torch.distributed.launch \
     --nproc_per_node=$NODE_NUM \
@@ -48,7 +49,7 @@ elif [ "$1"x == "h18"x ]; then
     --output_dir $OUTPUT \
     --backbone $BACKBONE \
     --resume auto \
-    --batch_size 1
+    --batch_size 2
 
 
 elif [ "$1"x == "h32"x ]; then

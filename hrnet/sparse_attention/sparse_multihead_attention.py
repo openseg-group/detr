@@ -33,8 +33,8 @@ class SparseMultiheadAttention(MultiheadAttention):
         add_zero_attn=False,
         self_attention=False,
         encoder_decoder_attention=False,
-        stride=32,
-        expressivity=8,
+        stride==32,
+        expressivity=16,
         is_bidirectional=True,
     ):
 

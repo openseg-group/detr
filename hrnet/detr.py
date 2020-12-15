@@ -17,7 +17,9 @@ from models.segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
 
 from .backbone import build_backbone
 from .transformer import build_transformer
+from .sparse_transformer import build_sparse_transformer
 
+import os
 import pdb
 
 class DETR(nn.Module):
@@ -330,7 +332,10 @@ def build(args):
 
     backbone = build_backbone(args)
 
-    transformer = build_transformer(args)
+    if int(os.environ.get("sparse_transformer", 0)):
+        transformer = build_sparse_transformer(args)
+    else:
+        transformer = build_transformer(args)
 
     model = DETR(
         backbone,
