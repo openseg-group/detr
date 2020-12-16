@@ -180,7 +180,7 @@ class MultiheadAttention(nn.Module):
                 self.dropout_module.p,
                 self.out_proj.weight,
                 self.out_proj.bias,
-                self.training or self.dropout_module.apply_during_inference,
+                self.training,
                 key_padding_mask,
                 need_weights,
                 attn_mask,

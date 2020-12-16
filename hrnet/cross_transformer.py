@@ -96,6 +96,79 @@ class CrossAttentionLayer(nn.Module):
         return out_f, out_g, out_h, out_t
 
 
+class CrossFusionLayer(nn.Module):
+    def __init__(self, 
+                 num_branches=4,
+                 num_inchannels=[18, 36, 72, 256]):
+        super(CrossFusionLayer, self).__init__()
+        self.num_branches = 4
+        self.num_inchannels = [18, 36, 72, 256]
+        self.fuse_layers = self._make_fuse_layers()
+        self.relu = nn.ReLU(inplace=True)
+
+    def _make_fuse_layers(self):
+        fuse_layers = []
+        for i in range(self.num_branches):
+            fuse_layer = []
+            for j in range(self.num_branches):
+                if j > i:
+                    fuse_layer.append(nn.Sequential(
+                        nn.Conv2d(self.num_inchannels[j],
+                                  self.num_inchannels[i],
+                                  1,
+                                  1,
+                                  0,
+                                  bias=False),
+                        nn.SyncBatchNorm(self.num_inchannels[i])))
+                elif j == i:
+                    fuse_layer.append(None)
+                else:
+                    conv3x3s = []
+                    for k in range(i-j):
+                        if k == i - j - 1:
+                            num_outchannels_conv3x3 = self.num_inchannels[i]
+                            conv3x3s.append(nn.Sequential(
+                                nn.Conv2d(self.num_inchannels[j],
+                                          num_outchannels_conv3x3,
+                                          3, 2, 1, bias=False),
+                                nn.SyncBatchNorm(num_outchannels_conv3x3)))
+                        else:
+                            num_outchannels_conv3x3 = self.num_inchannels[j]
+                            conv3x3s.append(nn.Sequential(
+                                nn.Conv2d(self.num_inchannels[j],
+                                          num_outchannels_conv3x3,
+                                          3, 2, 1, bias=False),
+                                nn.SyncBatchNorm(num_outchannels_conv3x3),
+                                nn.ReLU(inplace=True)))
+                    fuse_layer.append(nn.Sequential(*conv3x3s))
+            fuse_layers.append(nn.ModuleList(fuse_layer))
+
+        return nn.ModuleList(fuse_layers)
+
+    def forward(self, x):
+        x_fuse = []
+
+        for i in range(len(self.fuse_layers)):
+            y = x[0] if i == 0 else self.fuse_layers[i][0](x[0])
+            for j in range(1, self.num_branches):
+                if i == j:
+                    y = y + x[j]
+                elif j > i:
+                    width_output = x[i].shape[-1]
+                    height_output = x[i].shape[-2]
+                    y = y + F.interpolate(
+                        self.fuse_layers[i][j](x[j]),
+                        size=[height_output, width_output],
+                        mode='bilinear',
+                        align_corners=True
+                        )
+                else:
+                    y = y + self.fuse_layers[i][j](x[j])
+            x_fuse.append(self.relu(y))
+
+        return x_fuse
+
+
 class Transformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
@@ -119,26 +192,26 @@ class Transformer(nn.Module):
         self.d_model = d_model
         self.nhead = nhead
 
-        self.stride_4x_proj = nn.Sequential(
-            nn.Conv2d(18, 256, kernel_size=1),
-            nn.SyncBatchNorm(256),
-            nn.ReLU(inplace=True)
-        )
-        self.stride_8x_proj = nn.Sequential(
-            nn.Conv2d(36, 256, kernel_size=1),
-            nn.SyncBatchNorm(256),
-            nn.ReLU(inplace=True)
-        )
-        self.stride_16x_proj = nn.Sequential(
-            nn.Conv2d(72, 256, kernel_size=1),
-            nn.SyncBatchNorm(256),
-            nn.ReLU(inplace=True)
-        )
-        self.stride_32x_proj = nn.Sequential(
-            nn.Conv2d(144, 256, kernel_size=1),
-            nn.SyncBatchNorm(256),
-            nn.ReLU(inplace=True)
-        )
+        # self.stride_4x_proj = nn.Sequential(
+        #     nn.Conv2d(18, 64, kernel_size=1),
+        #     nn.LayerNorm(64), # nn.GroupNorm(32, 256) or nn.LayerNorm(256) or nn.SyncBatchNorm(256)
+        #     nn.ReLU(inplace=True)
+        # )
+        # self.stride_8x_proj = nn.Sequential(
+        #     nn.Conv2d(36, 64, kernel_size=1),
+        #     nn.SyncBatchNorm(64),
+        #     nn.ReLU(inplace=True)
+        # )
+        # self.stride_16x_proj = nn.Sequential(
+        #     nn.Conv2d(72, 64, kernel_size=1),
+        #     nn.SyncBatchNorm(64),
+        #     nn.ReLU(inplace=True)
+        # )
+        # self.stride_32x_proj = nn.Sequential(
+        #     nn.Conv2d(144, 64, kernel_size=1),
+        #     nn.SyncBatchNorm(64),
+        #     nn.ReLU(inplace=True)
+        # )
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -148,10 +221,12 @@ class Transformer(nn.Module):
     def forward(self, src, mask, query_embed, pos_embed, src_list, mask_list, pos_embed_list):
 
         # encoder
+
+        ''' CrossAttentionLayer usage '''
         _, _, h_4x, w_4x = src_list[0].size()
-        feat1 = self.stride_4x_proj(src_list[0])
-        feat2 = F.interpolate(self.stride_8x_proj(src_list[1]), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-        feat3 = F.interpolate(self.stride_16x_proj(src_list[2]), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+        # feat1 = self.stride_4x_proj(src_list[0])
+        # feat2 = F.interpolate(self.stride_8x_proj(src_list[1]), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+        # feat3 = F.interpolate(self.stride_16x_proj(src_list[2]), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
 
         bs, c, h, w = src.shape
         src = src.flatten(2).permute(2, 0, 1)
@@ -160,7 +235,10 @@ class Transformer(nn.Module):
         mask = mask.flatten(1)
         tgt = torch.zeros_like(query_embed)
 
-        memory_4x = self.encoder(src, feat_list=[feat1, feat2, feat3], src_key_padding_mask=mask, pos=pos_embed)
+        memory_4x = self.encoder(src, src_shape=[bs, c, h, w], \
+                                 feat_list=[src_list[0], src_list[1], src_list[2]], \
+                                 src_key_padding_mask=mask,
+                                 pos=pos_embed)
         mask_4x = mask_list[0]
         mask_4x = mask_4x.flatten(1)
         pos_embed_4x = pos_embed_list[0].flatten(2).permute(2, 0, 1)
@@ -181,19 +259,20 @@ class TransformerEncoder(nn.Module):
         self.norm = norm
 
         self.fuse_output_proj = nn.Sequential(
-            nn.Conv2d(1024, 256, kernel_size=1),
+            nn.Conv2d(382, 256, kernel_size=1),
             nn.SyncBatchNorm(256),
             nn.ReLU(inplace=True)
         )
 
-        self.cross_atten = CrossAttentionLayer(256)
+        # self.cross_atten = CrossAttentionLayer(256)
+        self.cross_fusion = CrossFusionLayer(num_branches=4, num_inchannels=[18, 36, 72, 256])
 
-    def forward(self, src, feat_list,
+    def forward(self, src, src_shape, feat_list,
                 mask: Optional[Tensor] = None,
                 src_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None
                 ):
-        bs, c, h, w = src.shape
+        bs, c, h, w = src_shape
         _, _, h_4x, w_4x = feat_list[0].shape
 
         output = src
@@ -204,12 +283,21 @@ class TransformerEncoder(nn.Module):
         for layer in self.layers:
             output = layer(output, src_mask=mask,
                            src_key_padding_mask=src_key_padding_mask, pos=pos)
-            output_32x = F.interpolate(output.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-            output_4x, output_8x, output_16x, output_32x = self.cross_atten(output_4x, output_8x, output_16x, output_32x)
-            output = F.interpolate(output_32x, size=(h, w), mode="bilinear", align_corners=True)
-            output = output.flatten(2).permute(2, 0, 1)
+            ''' CrossAttentionLayer usage '''
+            # output_32x = F.interpolate(output.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+            # output_4x, output_8x, output_16x, output_32x = self.cross_atten(output_4x, output_8x, output_16x, output_32x)
+            # output = F.interpolate(output_32x, size=(h, w), mode="bilinear", align_corners=True)
 
-        output_32x = F.interpolate(output.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+            ''' CrossFusionLayer usage '''
+            output_32x = output.permute(1, 2, 0).view(bs, c, h, w)
+            output_4x, output_8x, output_16x, output_32x = self.cross_fusion([output_4x, output_8x, output_16x, output_32x])
+            output = output_32x.flatten(2).permute(2, 0, 1)
+
+        output_32x = F.interpolate(output_32x, size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+        output_16x = F.interpolate(output_16x, size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+        output_8x = F.interpolate(output_8x, size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+        output_4x = F.interpolate(output_4x, size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+
         output = torch.cat([output_4x, output_8x, output_16x, output_32x], 1)
         output = self.fuse_output_proj(output)
         output = output.flatten(2).permute(2, 0, 1)
@@ -410,7 +498,7 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def build_transformer(args):
+def build_cross_transformer(args):
     return Transformer(
         d_model=args.hidden_dim,
         dropout=args.dropout,

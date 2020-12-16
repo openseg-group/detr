@@ -5,6 +5,7 @@ PYTHON="/data/anaconda/envs/pytorch1.6.0/bin/python"
 # $PYTHON -m pip install -U 'git+https://github.com/cocodataset/cocoapi.git#subdirectory=PythonAPI'
 
 $PYTHON -m pip install yacs
+$PYTHON -m pip install termcolor
 
 DATAPATH="/home/yuhui/teamdrive/dataset/coco"
 
@@ -39,8 +40,9 @@ elif [ "$1"x == "h18"x ]; then
     OUTPUT="outputs/detr_${BACKBONE}_singlegpu"
 
     export incre_memory_resolution=1
-    export freeze_stem_stage1=0
     export sparse_transformer=1
+    export fairseq_multi_head_attention=0
+    export cross_transformer=1
 
     $PYTHON -m torch.distributed.launch \
     --nproc_per_node=$NODE_NUM \
@@ -49,7 +51,7 @@ elif [ "$1"x == "h18"x ]; then
     --output_dir $OUTPUT \
     --backbone $BACKBONE \
     --resume auto \
-    --batch_size 2
+    --batch_size 1
 
 
 elif [ "$1"x == "h32"x ]; then

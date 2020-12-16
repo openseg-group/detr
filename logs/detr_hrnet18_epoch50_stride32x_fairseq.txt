@@ -1,0 +1,84 @@
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+| distributed init (rank 3): env://
+| distributed init (rank 5): env://
+| distributed init (rank 0): env://
+| distributed init (rank 2): env://
+| distributed init (rank 1): env://
+| distributed init (rank 6): env://
+| distributed init (rank 4): env://
+| distributed init (rank 7): env://
+git:
+  sha: 713c6e41577e8c741294f41139ba9fa0a54b7ece, status: has uncommited changes, branch: master
+
+Namespace(aux_loss=True, backbone='hrnet18', batch_size=2, bbox_loss_coef=5, clip_max_norm=0.1, coco_panoptic_path=None, coco_path='//rainbowsecret/dataset/coco', dataset_file='coco', dec_layers=6, device='cuda', dice_loss_coef=1, dilation=False, dim_feedforward=2048, dist_backend='nccl', dist_url='env://', distributed=True, dropout=0.1, enc_layers=6, eos_coef=0.1, epochs=50, eval=False, frozen_weights=None, giou_loss_coef=2, gpu=0, hidden_dim=256, lr=0.0001, lr_backbone=1e-05, lr_drop=40, mask_loss_coef=1, masks=False, nheads=8, num_queries=100, num_workers=2, output_dir='outputs/detr_hrnet18_gpu8x_epoch50_stride32x_fairseq', position_embedding='sine', pre_norm=False, rank=0, remove_difficult=False, resume='auto', seed=42, set_cost_bbox=5, set_cost_class=1, set_cost_giou=2, start_epoch=0, weight_decay=0.0001, world_size=8)
+Downloading: "https://opr0mq.dm.files.1drv.com/y4mIoWpP2n-LUohHHANpC0jrOixm1FZgO2OsUtP2DwIozH5RsoYVyv_De5wDgR6XuQmirMV3C0AljLeB-zQXevfLlnQpcNeJlT9Q8LwNYDwh3TsECkMTWXCUn3vDGJWpCxQcQWKONr5VQWO1hLEKPeJbbSZ6tgbWwJHgHF7592HY7ilmGe39o5BhHz7P9QqMYLBts6V7QGoaKrr0PL3wvvR4w" to /home/yuyua/.cache/torch/hub/checkpoints/y4mIoWpP2n-LUohHHANpC0jrOixm1FZgO2OsUtP2DwIozH5RsoYVyv_De5wDgR6XuQmirMV3C0AljLeB-zQXevfLlnQpcNeJlT9Q8LwNYDwh3TsECkMTWXCUn3vDGJWpCxQcQWKONr5VQWO1hLEKPeJbbSZ6tgbWwJHgHF7592HY7ilmGe39o5BhHz7P9QqMYLBts6V7QGoaKrr0PL3wvvR4w
+  0%|          | 0.00/81.8M [00:00<?, ?B/s]  1%|          | 656k/81.8M [00:00<00:14, 5.98MB/s]  2%|▏         | 1.64M/81.8M [00:00<00:12, 6.59MB/s]  6%|▋         | 5.14M/81.8M [00:00<00:09, 8.62MB/s]  9%|▉         | 7.77M/81.8M [00:00<00:08, 9.50MB/s] 18%|█▊        | 14.8M/81.8M [00:00<00:05, 12.7MB/s] 21%|██        | 17.4M/81.8M [00:01<00:06, 10.2MB/s] 29%|██▉       | 23.5M/81.8M [00:01<00:05, 11.5MB/s] 38%|███▊      | 31.4M/81.8M [00:01<00:03, 13.3MB/s] 48%|████▊     | 39.3M/81.8M [00:02<00:03, 14.8MB/s] 58%|█████▊    | 47.1M/81.8M [00:02<00:02, 15.5MB/s] 68%|██████▊   | 55.9M/81.8M [00:03<00:01, 16.7MB/s] 78%|███████▊  | 63.8M/81.8M [00:03<00:01, 18.5MB/s] 88%|████████▊ | 71.6M/81.8M [00:04<00:00, 17.9MB/s]100%|██████████| 81.8M/81.8M [00:04<00:00, 20.8MB/s]
+number of params: 27208804
+loading annotations into memory...
+Done (t=218.09s)
+creating index...
+index created!
+loading annotations into memory...
+Done (t=6.90s)
+creating index...
+index created!
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+    main(args)    
+main(args)  File "main_hrnet.py", line 184, in main
+
+  File "main_hrnet.py", line 184, in main
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+Traceback (most recent call last):
+  File "main_hrnet.py", line 265, in <module>
+    main(args)
+  File "main_hrnet.py", line 184, in main
+    logger.info('Missing keys: {}'.format(msg.missing_keys))
+NameError: name 'logger' is not defined
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.7/runpy.py", line 193, in _run_module_as_main
+    "__main__", mod_spec)
+  File "/opt/conda/lib/python3.7/runpy.py", line 85, in _run_code
+    exec(code, run_globals)
+  File "/opt/conda/lib/python3.7/site-packages/torch/distributed/launch.py", line 260, in <module>
+    main()
+  File "/opt/conda/lib/python3.7/site-packages/torch/distributed/launch.py", line 256, in main
+    cmd=cmd)
+subprocess.CalledProcessError: Command '['/opt/conda/bin/python', '-u', 'main_hrnet.py', '--coco_path', '//rainbowsecret/dataset/coco', '--output_dir', 'outputs/detr_hrnet18_gpu8x_epoch50_stride32x_fairseq', '--epochs', '50', '--lr_drop', '40', '--backbone', 'hrnet18', '--resume', 'auto']' returned non-zero exit status 1.
