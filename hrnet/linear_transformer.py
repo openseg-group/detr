@@ -17,7 +17,9 @@ from torch import nn, Tensor
 import os
 import pdb
 
-class Transformer(nn.Module):
+from .sparse_attention import MultiheadLinearAttention
+
+class LinearTransformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
                  num_decoder_layers=6, dim_feedforward=2048, dropout=0.1,
@@ -58,32 +60,10 @@ class Transformer(nn.Module):
         tgt = torch.zeros_like(query_embed)
         # encoder
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-
-        if int(os.environ.get("encoder_high_resolution", 0)):
-            # # enhance memory feature with the higher-resolution features
-            _, _, h_4x, w_4x = src_list[0].size()
-            # feat1 = src_list[0]
-            # feat2 = F.interpolate(src_list[1], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-            # feat3 = F.interpolate(src_list[2], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-            feat4 = F.interpolate(memory.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-
-            # feats = torch.cat([feat1, feat2, feat3, feat4], 1)
-            # memory_4x = self.encoder_output_proj(feats)
-            memory_4x = feat4
-            memory_4x = memory_4x.flatten(2).permute(2, 0, 1)
-            mask_4x = mask_list[0]
-            mask_4x = mask_4x.flatten(1)
-            pos_embed_4x = pos_embed_list[0].flatten(2).permute(2, 0, 1)
-
-            # decoder
-            hs = self.decoder(tgt, memory_4x, memory_key_padding_mask=mask_4x,
-                            pos=pos_embed_4x, query_pos=query_embed)
-            return hs.transpose(1, 2), memory_4x.permute(1, 2, 0).view(bs, c, h_4x, w_4x)
-
-        else:
-            hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                            pos=pos_embed, query_pos=query_embed)
-            return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+        # decoder
+        hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                        pos=pos_embed, query_pos=query_embed)
+        return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
 
 
 class TransformerEncoder(nn.Module):
@@ -156,7 +136,8 @@ class TransformerEncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+
+        self.self_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, self_attention=True)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -216,8 +197,10 @@ class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
         super().__init__()
+
+        # self.self_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout)
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-        self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.multihead_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, self_attention=True)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -300,8 +283,8 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def build_transformer(args):
-    return Transformer(
+def build_linear_transformer(args):
+    return LinearTransformer(
         d_model=args.hidden_dim,
         dropout=args.dropout,
         nhead=args.nheads,

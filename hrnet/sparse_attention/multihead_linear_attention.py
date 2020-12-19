@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -12,18 +12,16 @@ from torch import Tensor, nn
 from torch.nn import Parameter
 
 from .quant_noise import quant_noise
+from .multihead_attention import softmax
 
-def softmax(x, dim: int, onnx_trace: bool = False):
-    if onnx_trace:
-        return F.softmax(x.float(), dim=dim)
-    else:
-        return F.softmax(x, dim=dim, dtype=torch.float32)
+import pdb
 
+class MultiheadLinearAttention(nn.Module):
+    """Multi-headed linformer attention.
 
-class MultiheadAttention(nn.Module):
-    """Multi-headed attention.
+    Projects the key and values down to the compressed dimension, before computing self-attention.
 
-    See "Attention Is All You Need" for more details.
+    See "Linformer: Self-Attention with Linear Complexity" for more details.
     """
 
     def __init__(
@@ -40,6 +38,11 @@ class MultiheadAttention(nn.Module):
         encoder_decoder_attention=False,
         q_noise=0.0,
         qn_block_size=8,
+        compressed=256,
+        max_seq_len=32768,
+        shared_kv_compressed=0,
+        shared_compress_layer=None,
+        freeze_compress=0,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -48,11 +51,7 @@ class MultiheadAttention(nn.Module):
         self.qkv_same_dim = self.kdim == embed_dim and self.vdim == embed_dim
 
         self.num_heads = num_heads
-        self.dropout_module = nn.Dropout(dropout)
-        # self.dropout_module = FairseqDropout(
-        #     dropout, module_name=self.__class__.__name__
-        # )
-        
+        self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         assert (
             self.head_dim * num_heads == self.embed_dim
@@ -66,7 +65,6 @@ class MultiheadAttention(nn.Module):
             "Self-attention requires query, key and " "value to be of the same size"
         )
 
-        # https://github.com/pytorch/fairseq/tree/5a3e51d21187415a66632f65e92c71de61367a93/examples/quant_noise
         # self.k_proj = quant_noise(
         #     nn.Linear(self.kdim, embed_dim, bias=bias), q_noise, qn_block_size
         # )
@@ -76,13 +74,29 @@ class MultiheadAttention(nn.Module):
         # self.q_proj = quant_noise(
         #     nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
         # )
-        # self.out_proj = quant_noise(
-        #     nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
-        # )
-
         self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+        # used for compress sequence to subsequence
+        if shared_compress_layer is None:
+            self.compress_seq_len = max_seq_len // compressed
+            self.compress_k = nn.Linear(max_seq_len, self.compress_seq_len, bias=False)
+            if shared_kv_compressed == 0:
+                self.compress_v = nn.Linear(
+                    max_seq_len, self.compress_seq_len, bias=False
+                )
+            self.layerwise_sharing = False
+        else:
+            self.compress_k = shared_compress_layer
+            if shared_kv_compressed == 0:
+                self.compress_v = shared_compress_layer
+            self.layerwise_sharing = True
+        self.shared_kv_compressed = shared_kv_compressed
+
+        # self.out_proj = quant_noise(
+        #     nn.Linear(embed_dim, embed_dim, bias=bias), q_noise, qn_block_size
+        # )
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         if add_bias_kv:
@@ -95,14 +109,15 @@ class MultiheadAttention(nn.Module):
 
         self.reset_parameters()
 
+        if freeze_compress == 1:
+            self.compress_k.weight.requires_grad = False
+            if shared_kv_compressed == 0:
+                self.compress_v.weight.requires_grad = False
+
         self.onnx_trace = False
-        self.tpu = False
 
     def prepare_for_onnx_export_(self):
         self.onnx_trace = True
-
-    def prepare_for_tpu_(self, **kwargs):
-        self.tpu = True
 
     def reset_parameters(self):
         if self.qkv_same_dim:
@@ -111,10 +126,24 @@ class MultiheadAttention(nn.Module):
             nn.init.xavier_uniform_(self.k_proj.weight, gain=1 / math.sqrt(2))
             nn.init.xavier_uniform_(self.v_proj.weight, gain=1 / math.sqrt(2))
             nn.init.xavier_uniform_(self.q_proj.weight, gain=1 / math.sqrt(2))
+            if (
+                not self.layerwise_sharing
+            ):  # otherwise, we already initialize the parameters
+                nn.init.xavier_uniform_(self.compress_k.weight, gain=1 / math.sqrt(2))
+                if self.shared_kv_compressed == 0:
+                    nn.init.xavier_uniform_(
+                        self.compress_v.weight, gain=1 / math.sqrt(2)
+                    )
         else:
             nn.init.xavier_uniform_(self.k_proj.weight)
             nn.init.xavier_uniform_(self.v_proj.weight)
             nn.init.xavier_uniform_(self.q_proj.weight)
+            if (
+                not self.layerwise_sharing
+            ):  # otherwise, we already initialize the parameters
+                nn.init.xavier_uniform_(self.compress_k.weight)
+                if self.shared_kv_compressed == 0:
+                    nn.init.xavier_uniform_(self.compress_v.weight)
 
         nn.init.xavier_uniform_(self.out_proj.weight)
         if self.out_proj.bias is not None:
@@ -161,40 +190,6 @@ class MultiheadAttention(nn.Module):
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
 
-        if (
-            not self.onnx_trace
-            and not self.tpu  # don't use PyTorch version on TPUs
-            and incremental_state is None
-            and not static_kv
-            # A workaround for quantization to work. Otherwise JIT compilation
-            # treats bias in linear module as method.
-            and not torch.jit.is_scripting()
-        ):
-            assert key is not None and value is not None
-            return F.multi_head_attention_forward(
-                query,
-                key,
-                value,
-                self.embed_dim,
-                self.num_heads,
-                torch.empty([0]),
-                torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias)),
-                self.bias_k,
-                self.bias_v,
-                self.add_zero_attn,
-                self.dropout_module.p,
-                self.out_proj.weight,
-                self.out_proj.bias,
-                self.training,
-                key_padding_mask,
-                need_weights,
-                attn_mask,
-                use_separate_proj_weight=True,
-                q_proj_weight=self.q_proj.weight,
-                k_proj_weight=self.k_proj.weight,
-                v_proj_weight=self.v_proj.weight,
-            )
-
         if incremental_state is not None:
             saved_state = self._get_input_buffer(incremental_state)
             if saved_state is not None and "prev_key" in saved_state:
@@ -208,8 +203,29 @@ class MultiheadAttention(nn.Module):
 
         if self.self_attention:
             q = self.q_proj(query)
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+
+            k_input = query.permute(1, 2, 0).contiguous()  # B * C * T
+            k_input = (
+                F.linear(k_input, self.compress_k.weight[:, 0:tgt_len])
+                .permute(2, 0, 1)
+                .contiguous()
+            )
+            k = self.k_proj(k_input)
+
+            v_input = query.permute(1, 2, 0).contiguous()  # B * C * T
+            if self.shared_kv_compressed == 0:
+                v_input = (
+                    F.linear(v_input, self.compress_v.weight[:, 0:tgt_len])
+                    .permute(2, 0, 1)
+                    .contiguous()
+                )
+            if self.shared_kv_compressed == 1:  # use shared kv compressed linear layer
+                v_input = (
+                    F.linear(v_input, self.compress_k.weight[:, 0:tgt_len])
+                    .permute(2, 0, 1)
+                    .contiguous()
+                )
+            v = self.v_proj(v_input)
         elif self.encoder_decoder_attention:
             # encoder-decoder attention
             q = self.q_proj(query)
@@ -286,7 +302,7 @@ class MultiheadAttention(nn.Module):
             if "prev_key_padding_mask" in saved_state:
                 prev_key_padding_mask = saved_state["prev_key_padding_mask"]
             assert k is not None and v is not None
-            key_padding_mask = MultiheadAttention._append_prev_key_padding_mask(
+            key_padding_mask = MultiheadLinearAttention._append_prev_key_padding_mask(
                 key_padding_mask=key_padding_mask,
                 prev_key_padding_mask=prev_key_padding_mask,
                 batch_size=bsz,
@@ -303,15 +319,6 @@ class MultiheadAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
 
-        # This is part of a workaround to get around fork/join parallelism
-        # not supporting Optional types.
-        if key_padding_mask is not None and key_padding_mask.dim() == 0:
-            key_padding_mask = None
-
-        if key_padding_mask is not None:
-            assert key_padding_mask.size(0) == bsz
-            assert key_padding_mask.size(1) == src_len
-
         if self.add_zero_attn:
             assert v is not None
             src_len += 1
@@ -321,19 +328,11 @@ class MultiheadAttention(nn.Module):
                 attn_mask = torch.cat(
                     [attn_mask, attn_mask.new_zeros(attn_mask.size(0), 1)], dim=1
                 )
-            if key_padding_mask is not None:
-                key_padding_mask = torch.cat(
-                    [
-                        key_padding_mask,
-                        torch.zeros(key_padding_mask.size(0), 1).type_as(
-                            key_padding_mask
-                        ),
-                    ],
-                    dim=1,
-                )
 
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        attn_weights = self.apply_sparse_mask(attn_weights, tgt_len, src_len, bsz)
+        attn_weights = MultiheadLinearAttention.apply_sparse_mask(
+            attn_weights, tgt_len, src_len, bsz
+        )
 
         assert list(attn_weights.size()) == [bsz * self.num_heads, tgt_len, src_len]
 
@@ -343,20 +342,6 @@ class MultiheadAttention(nn.Module):
                 attn_mask = attn_mask.repeat(attn_weights.size(0), 1, 1)
             attn_weights += attn_mask
 
-        if key_padding_mask is not None:
-            # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            if not self.tpu:
-                attn_weights = attn_weights.masked_fill(
-                    key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
-                    float("-inf"),
-                )
-            else:
-                attn_weights = attn_weights.transpose(0, 2)
-                attn_weights = attn_weights.masked_fill(key_padding_mask, float("-inf"))
-                attn_weights = attn_weights.transpose(0, 2)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
         if before_softmax:
             return attn_weights, v
 
@@ -364,8 +349,11 @@ class MultiheadAttention(nn.Module):
             attn_weights, dim=-1, onnx_trace=self.onnx_trace
         )
         attn_weights = attn_weights_float.type_as(attn_weights)
-        attn_probs = self.dropout_module(attn_weights)
-
+        attn_probs = F.dropout(
+            attn_weights,
+            p=self.dropout,
+            training=self.training,
+        )
         assert v is not None
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [bsz * self.num_heads, tgt_len, self.head_dim]
@@ -462,7 +450,7 @@ class MultiheadAttention(nn.Module):
     ):
         return self.set_incremental_state(incremental_state, "attn_state", buffer)
 
-    def apply_sparse_mask(self, attn_weights, tgt_len: int, src_len: int, bsz: int):
+    def apply_sparse_mask(attn_weights, tgt_len: int, src_len: int, bsz: int):
         return attn_weights
 
     def upgrade_state_dict_named(self, state_dict, name):

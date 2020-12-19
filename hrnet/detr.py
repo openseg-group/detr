@@ -18,6 +18,7 @@ from models.segmentation import (DETRsegm, PostProcessPanoptic, PostProcessSegm,
 from .backbone import build_backbone
 from .transformer import build_transformer
 from .sparse_transformer import build_sparse_transformer
+from .linear_transformer import build_linear_transformer
 from .cross_transformer import build_cross_transformer
 
 import os
@@ -42,9 +43,13 @@ class DETR(nn.Module):
         self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         self.backbone = backbone
         self.aux_loss = aux_loss
+
+        if int(os.environ.get("encoder_high_resolution", 0)):
+            self.input_proj = nn.Conv2d((backbone.num_channels//8) * 15, hidden_dim, kernel_size=1)
+        else:
+            self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
 
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
@@ -66,8 +71,6 @@ class DETR(nn.Module):
         features, pos = self.backbone(samples)
         
         src, mask = features[-1].decompose()
-        assert src is not None
-
         src_4x, mask_4x = features[0].decompose()
         src_8x, mask_8x = features[1].decompose()
         src_16x, mask_16x = features[2].decompose()
@@ -75,8 +78,37 @@ class DETR(nn.Module):
         mask_list = [mask_4x, mask_8x, mask_16x]
         pos_embed_list = [pos[0], pos[1], pos[2]]
 
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1],
-                              src_list, mask_list, pos_embed_list)[0]
+        if int(os.environ.get("encoder_high_resolution", 0)):
+            if int(os.environ.get("encoder_resolution", 8)) == 8:
+                _, _, h_8x, w_8x = src_list[1].size()
+                feat1 = F.interpolate(src_list[0], size=(h_8x, w_8x), mode="bilinear", align_corners=True)
+                feat2 = src_list[1]
+                feat3 = F.interpolate(src_list[2], size=(h_8x, w_8x), mode="bilinear", align_corners=True)
+                feat4 = F.interpolate(src, size=(h_8x, w_8x), mode="bilinear", align_corners=True)
+                feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+                hs = self.transformer(self.input_proj(feats), mask_8x, self.query_embed.weight, pos[1],
+                                    src_list, mask_list, pos_embed_list)[0]
+            elif int(os.environ.get("encoder_resolution", 8)) == 16:
+                _, _, h_16x, w_16x = src_list[2].size()
+                feat1 = F.interpolate(src_list[0], size=(h_16x, w_16x), mode="bilinear", align_corners=True)
+                feat2 = F.interpolate(src_list[1], size=(h_16x, w_16x), mode="bilinear", align_corners=True)
+                feat3 = src_list[2]
+                feat4 = F.interpolate(src, size=(h_16x, w_16x), mode="bilinear", align_corners=True)
+                feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+                hs = self.transformer(self.input_proj(feats), mask_16x, self.query_embed.weight, pos[2],
+                                    src_list, mask_list, pos_embed_list)[0]
+            else:
+                _, _, h_32x, w_32x = src.size()
+                feat1 = F.interpolate(src_list[0], size=(h_32x, w_32x), mode="bilinear", align_corners=True)
+                feat2 = F.interpolate(src_list[1], size=(h_32x, w_32x), mode="bilinear", align_corners=True)
+                feat3 = F.interpolate(src_list[2], size=(h_32x, w_32x), mode="bilinear", align_corners=True)
+                feat4 = src
+                feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+                hs = self.transformer(self.input_proj(feats), mask, self.query_embed.weight, pos[-1],
+                                    src_list, mask_list, pos_embed_list)[0]
+        else:
+            hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1],
+                                src_list, mask_list, pos_embed_list)[0]
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
@@ -338,6 +370,8 @@ def build(args):
         transformer = build_cross_transformer(args)
     elif int(os.environ.get("sparse_transformer", 0)):
         transformer = build_sparse_transformer(args)
+    elif int(os.environ.get("linear_transformer", 0)):
+        transformer = build_linear_transformer(args)
     else:
         transformer = build_transformer(args)
 
