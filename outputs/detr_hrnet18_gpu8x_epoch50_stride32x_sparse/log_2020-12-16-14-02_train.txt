@@ -1672,3 +1672,4 @@
 )
 [12/16 14:02:24] DETR INFO: number of params: 27208804
 [12/16 14:06:16] DETR INFO: Start training
+[12/19 07:14:36] DETR INFO: Training time 2 days, 17:08:20

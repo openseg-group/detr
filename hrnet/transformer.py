@@ -59,31 +59,31 @@ class Transformer(nn.Module):
         # encoder
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
 
-        if int(os.environ.get("encoder_high_resolution", 0)):
+        # if int(os.environ.get("encoder_high_resolution", 0)):
             # # enhance memory feature with the higher-resolution features
-            _, _, h_4x, w_4x = src_list[0].size()
+            # _, _, h_4x, w_4x = src_list[0].size()
             # feat1 = src_list[0]
             # feat2 = F.interpolate(src_list[1], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
             # feat3 = F.interpolate(src_list[2], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
-            feat4 = F.interpolate(memory.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+            # feat4 = F.interpolate(memory.permute(1, 2, 0).view(bs, c, h, w), size=(h_4x, w_4x), mode="bilinear", align_corners=True)
 
             # feats = torch.cat([feat1, feat2, feat3, feat4], 1)
             # memory_4x = self.encoder_output_proj(feats)
-            memory_4x = feat4
-            memory_4x = memory_4x.flatten(2).permute(2, 0, 1)
-            mask_4x = mask_list[0]
-            mask_4x = mask_4x.flatten(1)
-            pos_embed_4x = pos_embed_list[0].flatten(2).permute(2, 0, 1)
+            # memory_4x = feat4
+            # memory_4x = memory_4x.flatten(2).permute(2, 0, 1)
+            # mask_4x = mask_list[0]
+            # mask_4x = mask_4x.flatten(1)
+            # pos_embed_4x = pos_embed_list[0].flatten(2).permute(2, 0, 1)
 
-            # decoder
-            hs = self.decoder(tgt, memory_4x, memory_key_padding_mask=mask_4x,
-                            pos=pos_embed_4x, query_pos=query_embed)
-            return hs.transpose(1, 2), memory_4x.permute(1, 2, 0).view(bs, c, h_4x, w_4x)
+            # # decoder
+            # hs = self.decoder(tgt, memory_4x, memory_key_padding_mask=mask_4x,
+            #                 pos=pos_embed_4x, query_pos=query_embed)
+            # return hs.transpose(1, 2), memory_4x.permute(1, 2, 0).view(bs, c, h_4x, w_4x)
 
-        else:
-            hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                            pos=pos_embed, query_pos=query_embed)
-            return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+        # else:
+        hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+                        pos=pos_embed, query_pos=query_embed)
+        return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
 
 
 class TransformerEncoder(nn.Module):

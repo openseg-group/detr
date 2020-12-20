@@ -239,8 +239,33 @@ class MultiheadLinearAttention(nn.Module):
         else:
             assert key is not None and value is not None
             q = self.q_proj(query)
-            k = self.k_proj(key)
-            v = self.v_proj(value)
+            # k = self.k_proj(key)
+            # v = self.v_proj(value)
+
+            kv_len, _, _ = key.size()
+            k_input = key.permute(1, 2, 0).contiguous()  # B * C * T
+            k_input = (
+                F.linear(k_input, self.compress_k.weight[:, 0:kv_len])
+                .permute(2, 0, 1)
+                .contiguous()
+            )
+            k = self.k_proj(k_input)
+
+            v_input = value.permute(1, 2, 0).contiguous()  # B * C * T
+            if self.shared_kv_compressed == 0:
+                v_input = (
+                    F.linear(v_input, self.compress_v.weight[:, 0:kv_len])
+                    .permute(2, 0, 1)
+                    .contiguous()
+                )
+            if self.shared_kv_compressed == 1:  # use shared kv compressed linear layer
+                v_input = (
+                    F.linear(v_input, self.compress_k.weight[:, 0:kv_len])
+                    .permute(2, 0, 1)
+                    .contiguous()
+                )
+            v = self.v_proj(v_input)
+
         q *= self.scaling
 
         if self.bias_k is not None:

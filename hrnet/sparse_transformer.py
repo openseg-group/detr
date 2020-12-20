@@ -162,9 +162,9 @@ class TransformerEncoderLayer(nn.Module):
         super().__init__()
 
         if int(os.environ.get("fairseq_multi_head_attention", 0)):
-            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, self_attention=True)
+            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         else:
-            self.self_attn = SparseMultiheadAttention(d_model, nhead, dropout=dropout, self_attention=True)
+            self.self_attn = SparseMultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -226,10 +226,10 @@ class TransformerDecoderLayer(nn.Module):
         super().__init__()
 
         if int(os.environ.get("fairseq_multi_head_attention", 0)):
-            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, self_attention=True)
+            self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
             self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         else:
-            self.self_attn = SparseMultiheadAttention(d_model, nhead, dropout=dropout, self_attention=True)
+            self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
             self.multihead_attn = MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)

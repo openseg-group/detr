@@ -79,7 +79,16 @@ class DETR(nn.Module):
         pos_embed_list = [pos[0], pos[1], pos[2]]
 
         if int(os.environ.get("encoder_high_resolution", 0)):
-            if int(os.environ.get("encoder_resolution", 8)) == 8:
+            if int(os.environ.get("encoder_resolution", 8)) == 4:
+                _, _, h_4x, w_4x = src_list[0].size()
+                feat1 = src_list[0]
+                feat2 = F.interpolate(src_list[1], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+                feat3 = F.interpolate(src_list[2], size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+                feat4 = F.interpolate(src, size=(h_4x, w_4x), mode="bilinear", align_corners=True)
+                feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+                hs = self.transformer(self.input_proj(feats), mask_4x, self.query_embed.weight, pos[0],
+                                    src_list, mask_list, pos_embed_list)[0]
+            elif int(os.environ.get("encoder_resolution", 8)) == 8:
                 _, _, h_8x, w_8x = src_list[1].size()
                 feat1 = F.interpolate(src_list[0], size=(h_8x, w_8x), mode="bilinear", align_corners=True)
                 feat2 = src_list[1]

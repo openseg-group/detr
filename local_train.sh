@@ -40,11 +40,11 @@ elif [ "$1"x == "h18"x ]; then
     OUTPUT="outputs/detr_${BACKBONE}_singlegpu"
 
     # export sparse_transformer=1
-    # export cross_transformer=0
+    # export cross_transformer=1
     export linear_transformer=1
     # export fairseq_multi_head_attention=1
     export encoder_high_resolution=1
-    export encoder_resolution=32
+    export encoder_resolution=16
 
     $PYTHON -m torch.distributed.launch \
     --nproc_per_node=$NODE_NUM \
@@ -53,7 +53,7 @@ elif [ "$1"x == "h18"x ]; then
     --output_dir $OUTPUT \
     --backbone $BACKBONE \
     --resume auto \
-    --batch_size 1
+    --batch_size 2
 
 
 elif [ "$1"x == "h32"x ]; then

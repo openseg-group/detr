@@ -137,7 +137,7 @@ class TransformerEncoderLayer(nn.Module):
                  activation="relu", normalize_before=False):
         super().__init__()
 
-        self.self_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, self_attention=True)
+        self.self_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, shared_kv_compressed=1)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -200,7 +200,7 @@ class TransformerDecoderLayer(nn.Module):
 
         # self.self_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout)
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-        self.multihead_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, self_attention=True)
+        self.multihead_attn = MultiheadLinearAttention(d_model, nhead, dropout=dropout, shared_kv_compressed=1)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)

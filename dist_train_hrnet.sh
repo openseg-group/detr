@@ -12,10 +12,11 @@ LR_DROP=40
 
 
 if [ "$3"x == "1"x ]; then
-    export encoder_high_resolution=0
+    export encoder_high_resolution=1
+    export encoder_resolution=32
 
-    OUTPUT="outputs/detr_${BACKBONE}_gpu${NODE_NUM}x_epoch${MAX_EPOCH}_stride32x"
-    LOG="logs/detr_${BACKBONE}_epoch${MAX_EPOCH}_stride32x.txt"
+    OUTPUT="outputs/detr_${BACKBONE}_gpu${NODE_NUM}x_epoch${MAX_EPOCH}_stride32x_fuse"
+    LOG="logs/detr_${BACKBONE}_epoch${MAX_EPOCH}_stride32x_fuse.txt"
 
     $PYTHON -m torch.distributed.launch \
                 --nproc_per_node=$NODE_NUM \
@@ -86,7 +87,7 @@ elif [ "$3"x == "4"x ]; then
                 2>&1 | tee ${LOG}
 
 elif [ "$3"x == "5"x ]; then
-    export encoder_high_resolution=1
+    export encoder_high_resolution=0
     export sparse_transformer=0
     export cross_transformer=1
 
